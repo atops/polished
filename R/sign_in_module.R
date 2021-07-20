@@ -52,7 +52,7 @@ sign_in_module_ui <- function(
     br(),
     shinyFeedback::loadingButton(
       ns("sign_in_submit"),
-      label = "Sign In",
+      label = "_Sign In",
       class = "btn btn-primary btn-lg text-center",
       style = "width: 100%",
       loadingLabel = "Authenticating...",
@@ -124,7 +124,7 @@ sign_in_module_ui <- function(
       htmltools::h1(
         class = "text-center",
         style = "padding-top: 0;",
-        "Sign In"
+        "Sign In_"
       ),
       tags$br(),
       email_input(
