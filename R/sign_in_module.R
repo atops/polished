@@ -17,6 +17,7 @@
 #'
 sign_in_module_ui <- function(
   id,
+  sign_in_panel_top = htmltools::h1(class = "text-center", style = "padding-top: 0;", "Sign In"),
   register_link = "First time user? Register here!"
 ) {
   ns <- shiny::NS(id)
@@ -52,7 +53,7 @@ sign_in_module_ui <- function(
     br(),
     shinyFeedback::loadingButton(
       ns("sign_in_submit"),
-      label = "_Sign In",
+      label = "Sign In",
       class = "btn btn-primary btn-lg text-center",
       style = "width: 100%",
       loadingLabel = "Authenticating...",
@@ -121,11 +122,7 @@ sign_in_module_ui <- function(
     id = ns("email_ui"),
     tags$div(
       id = ns("sign_in_panel_top"),
-      htmltools::h1(
-        class = "text-center",
-        style = "padding-top: 0;",
-        "Sign In_"
-      ),
+      sign_in_panel_top,
       tags$br(),
       email_input(
         inputId = ns("sign_in_email"),
