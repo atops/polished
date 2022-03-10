@@ -18,7 +18,8 @@
 sign_in_module_ui <- function(
   id,
   sign_in_panel_top = htmltools::h1(class = "text-center", style = "padding-top: 0;", "Sign In"),
-  register_link = "First time user? Register here!"
+  register_link = "First time user? Register here!",
+  password_reset_link = "Forgot your password?"
 ) {
   ns <- shiny::NS(id)
 
