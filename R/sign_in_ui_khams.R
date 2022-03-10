@@ -30,7 +30,7 @@
 #' @return the UI for the Sign In & Registration pages
 #'
 sign_in_ui_khams <- function(
-    sign_in_module = sign_in_module_ui("sign_in"),
+    sign_in_module = sign_in_module_ui("sign_in", register_link = NULL),
     color = "#5ec7dd",
     company_name = "Your Brand Here",
     logo_top = tags$div(
