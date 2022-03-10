@@ -34,15 +34,14 @@ user_edit_module <- function(input, output, session,
 
     tryCatch({
       res <- httr::GET(
-        url = paste0(getOption("polished")$api_url, "/apps"),
+        url = paste0(.polished$api_url, "/apps"),
         query = list(
-          app_uid = getOption("polished")$app_uid
+          app_uid = .polished$app_uid
         ),
         httr::authenticate(
-          user = getOption("polished")$api_key,
+          user = get_api_key(),
           password = ""
-        ),
-        config = list(http_version = 0)
+        )
       )
 
       res_content <- jsonlite::fromJSON(
@@ -187,20 +186,19 @@ user_edit_module <- function(input, output, session,
       tryCatch({
 
         res <- httr::POST(
-          url = paste0(getOption("polished")$api_url, "/app-users"),
+          url = paste0(.polished$api_url, "/app-users"),
           body = list(
             email = input_email,
-            app_uid = getOption("polished")$app_uid,
+            app_uid = .polished$app_uid,
             is_admin = is_admin_out,
             req_user_uid = session$userData$user()$user_uid,
             send_invite_email = input$send_invite_email
           ),
           httr::authenticate(
-            user = getOption("polished")$api_key,
+            user = get_api_key(),
             password = ""
           ),
-          encode = "json",
-          config = list(http_version = 0)
+          encode = "json"
         )
 
         if (!identical(httr::status_code(res), 200L)) {
@@ -209,7 +207,7 @@ user_edit_module <- function(input, output, session,
             httr::content(res, "text", encoding = "UTF-8")
           )
 
-          stop(err, call. = FALSE)
+          stop(err$error, call. = FALSE)
         }
 
 
@@ -272,19 +270,18 @@ user_edit_module <- function(input, output, session,
 
         # update the app user
         res <- httr::PUT(
-          url = paste0(getOption("polished")$api_url, "/app-users"),
+          url = paste0(.polished$api_url, "/app-users"),
           body = list(
             user_uid = hold_user$user_uid,
-            app_uid = getOption("polished")$app_uid,
+            app_uid = .polished$app_uid,
             is_admin = is_admin_out,
             req_user_uid = session$userData$user()$user_uid
           ),
           httr::authenticate(
-            user = getOption("polished")$api_key,
+            user = get_api_key(),
             password = ""
           ),
-          encode = "json"#,
-          #config = list(http_version = 0)
+          encode = "json"
         )
 
         if (!identical(httr::status_code(res), 200L)) {

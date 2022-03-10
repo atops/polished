@@ -1,24 +1,19 @@
 Package: polished
 Type: Package
 Title: Authentication, User Administration, and Hosting for 'shiny' Apps
-Version: 0.3.0.9000
+Version: 0.6.1.9000
 Authors@R: c(
   person("Andy", "Merlino", email = "andy.merlino@tychobra.com", role = c("aut", "cre")),
-  person("Patrick", "Howard", email = "patrick.howard@tychobra.com", role = c("aut")),
-  person("Jimmy", "Briggs", email = "jimmy.briggs@tychobra.com", role = c("aut")))
+  person("Patrick", "Howard", email = "patrick.howard@tychobra.com", role = c("aut")))
 Maintainer: Andy Merlino <andy.merlino@tychobra.com>
-Description: Easily add modern authentication and user administration to your 'shiny' apps. 
-  Customize user sign in and registration pages to match your brand.  Control who can
-  access one or more of your 'shiny' apps.
+Description: Authentication, user administration, hosting, and additional infrastructure for 'shiny' apps. 
 License: MIT + file LICENSE
 URL: https://github.com/tychobra/polished,
     https://polished.tech
 BugReports: https://github.com/tychobra/polished/issues
 Encoding: UTF-8
-LazyData: true
 Imports:
     automagic,
-    cli,
     digest,
     dplyr,
     DT,
@@ -27,9 +22,10 @@ Imports:
     jose,
     jsonlite,
     lubridate,
+    otp,
     purrr,
-    R6,
     rlang,
+    rmarkdown,
     shiny,
     shinycssloaders,
     shinydashboard,
@@ -40,14 +36,16 @@ Imports:
     stringr,
     tibble,
     tidyr,
-    tools,
     utils,
     uuid,
     yaml
 Suggests:
+    testthat (>= 3.0.0),
     knitr,
-    rmarkdown
+    config,
+    xfun
 VignetteBuilder: 
     knitr
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
+Config/testthat/edition: 3

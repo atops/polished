@@ -1,14 +1,16 @@
-#' admin_user_access_ui
+#' admin user access_ui
+#'
+#' Shiny module UI for the default user access tab in the \code{polished} Admin Panel.
 #'
 #' @param id the module id
 #'
-#' @importFrom shiny fluidRow column actionButton
+#' @importFrom shiny NS fluidRow column actionButton icon
 #' @importFrom shinydashboard tabItem box
 #' @importFrom shinycssloaders withSpinner
 #' @importFrom htmltools br tags
 #' @importFrom DT DTOutput
 #'
-#' @noRd
+#' @export
 #'
 user_access_module_ui <- function(id) {
   ns <- shiny::NS(id)
@@ -37,7 +39,7 @@ user_access_module_ui <- function(id) {
               class = "btn-success",
               #style = "color: #fff; position: absolute: top: 20, left: 15; margin-bottom: 0;",
               style = "color: #fff;",
-              icon = icon("user-plus")
+              icon = shiny::icon("user-plus")
             )
           )
         ),
@@ -65,7 +67,10 @@ user_access_module_ui <- function(id) {
   )
 }
 
-#' admin_user_access
+#' admin user access module
+#'
+#' Server function for the default Shiny module to control user access in the \code{polished}
+#' Admin Panel.
 #'
 #' @param input the Shiny server input
 #' @param output the Shiny server output
@@ -75,13 +80,15 @@ user_access_module_ui <- function(id) {
 #' @importFrom htmltools tags
 #' @importFrom DT renderDT datatable dataTableProxy formatDate replaceData JS
 #' @importFrom dplyr filter select %>% left_join mutate
-#' @importFrom tibble tibble
+#' @importFrom tibble tibble as_tibble
 #' @importFrom shinyFeedback showToast
 #' @importFrom purrr map_chr
 #' @importFrom lubridate force_tz as_datetime
 #' @importFrom rlang .data
+#' @importFrom httr GET authenticate stop_for_status content
+#' @importFrom jsonlite fromJSON
 #'
-#' @noRd
+#' @export
 #'
 user_access_module <- function(input, output, session) {
   ns <- session$ns
@@ -91,55 +98,28 @@ user_access_module <- function(input, output, session) {
   users <- reactive({
     users_trigger()
 
-    hold_app_name <- getOption("polished")$app_uid
 
     out <- NULL
     tryCatch({
 
+      app_users_res <- get_app_users(
+        app_uid = .polished$app_uid
+      )
+
+      app_users <- app_users_res$content
+
+      app_users <- app_users %>%
+        mutate(created_at = as.POSIXct(.data$created_at))
+
       res <- httr::GET(
-        url = paste0(getOption("polished")$api_url, "/app-users"),
+        url = paste0(.polished$api_url, "/last-active-session-time"),
         query = list(
-          app_uid = getOption("polished")$app_uid
+          app_uid = .polished$app_uid
         ),
         httr::authenticate(
-          user = getOption("polished")$api_key,
+          user = get_api_key(),
           password = ""
-        ),
-        config = list(http_version = 0)
-      )
-
-      httr::stop_for_status(res)
-
-      app_users <- jsonlite::fromJSON(
-        httr::content(res, "text", encoding = "UTF-8")
-      )
-
-
-      if (length(app_users) == 0) {
-        app_users <- tibble::tibble(
-          "uid" = character(0),
-          "app_uid" = character(0),
-          "user_uid" = character(0),
-          "is_admin" = logical(0),
-          "created_at" = as.POSIXct(character(0)),
-          "email" = character(0)
         )
-      } else {
-        app_users <- app_users %>%
-          mutate(created_at = as.POSIXct(.data$created_at))
-      }
-
-
-      res <- httr::GET(
-        url = paste0(getOption("polished")$api_url, "/last-active-session-time"),
-        query = list(
-          app_uid = getOption("polished")$app_uid
-        ),
-        httr::authenticate(
-          user = getOption("polished")$api_key,
-          password = ""
-        ),
-        config = list(http_version = 0)
       )
 
       httr::stop_for_status(res)
@@ -148,13 +128,7 @@ user_access_module <- function(input, output, session) {
         httr::content(res, "text", encoding = "UTF-8")
       )
 
-
-      if (length(last_active_times) == 0) {
-        last_active_times <- tibble::tibble(
-          user_uid = character(0),
-          last_sign_in_at = character(0)
-        )
-      }
+      last_active_times <- tibble::as_tibble(last_active_times)
 
       last_active_times <- last_active_times %>%
         mutate(last_sign_in_at = lubridate::force_tz(lubridate::as_datetime((.data$last_sign_in_at)), tzone = "UTC"))
@@ -164,12 +138,13 @@ user_access_module <- function(input, output, session) {
 
     }, error = function(err) {
 
-      print("[polished] error")
+      msg <- "unable to get users from API"
+      print(paste0("[polished] error: ", msg))
       print(err)
 
       showToast(
         "error",
-        "Error retrieving app users from API",
+        msg,
         .options = polished_toast_options
       )
     })
@@ -191,7 +166,7 @@ user_access_module <- function(input, output, session) {
 
         the_row <- out[row_num, ]
 
-        if (.global_sessions$get_admin_mode()) {
+        if (.polished$admin_mode) {
           buttons_out <- paste0('<div class="btn-group" style="width: 105px" role="group" aria-label="User Action Buttons">
             <button class="btn btn-default btn-sm sign_in_as_btn" data-toggle="tooltip" data-placement="top" title="Sign In As" id = ', the_row$user_uid, ' style="margin: 0" disabled><i class="fas fa-user-astronaut"></i></button>
             <button class="btn btn-primary btn-sm edit_btn" data-toggle="tooltip" data-placement="top" title="Edit User" id = ', the_row$user_uid, ' style="margin: 0"><i class="fa fa-pencil-square-o"></i></button>
@@ -366,23 +341,22 @@ user_access_module <- function(input, output, session) {
     shiny::removeModal()
 
     user_uid <- user_to_delete()$user_uid
-    app_uid <- getOption("polished")$app_uid
+    app_uid <- .polished$app_uid
 
     tryCatch({
 
       res <- httr::DELETE(
-        url = paste0(getOption("polished")$api_url, "/app-users"),
+        url = paste0(.polished$api_url, "/app-users"),
         body = list(
           user_uid = user_uid,
           app_uid = app_uid,
           req_user_uid = session$userData$user()$user_uid
         ),
         httr::authenticate(
-          user = getOption("polished")$api_key,
+          user = get_api_key(),
           password = ""
         ),
-        encode = "json",
-        config = list(http_version = 0)
+        encode = "json"
       )
 
       httr::stop_for_status(res)
@@ -406,7 +380,7 @@ user_access_module <- function(input, output, session) {
 
 
   shiny::observeEvent(input$sign_in_as_btn_user_uid, {
-    req(!.global_sessions$get_admin_mode())
+    req(isFALSE(.polished$admin_mode))
     hold_user <- session$userData$user()
 
     user_to_sign_in_as <- users() %>%
@@ -414,10 +388,11 @@ user_access_module <- function(input, output, session) {
       dplyr::pull("user_uid")
 
     # sign in as another user
-    .global_sessions$set_signed_in_as(
-      hold_user$session_uid,
-      user_to_sign_in_as,
-      user_uid = hold_user$user_uid
+    update_session(
+      session_uid = hold_user$session_uid,
+      session_data = list(
+        signed_in_as = user_to_sign_in_as
+      )
     )
 
     # to to the Shiny app

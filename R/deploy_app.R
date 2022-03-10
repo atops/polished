@@ -6,9 +6,11 @@ valid_gcp_regions <- c(
   "asia-northeast2",
   "asia-northeast3",
   "asia-south1",
+  "asia-south2",
   "asia-southeast1",
   "asia-southeast2",
   "australia-southeast1",
+  "australia-southeast2",
   "europe-north1",
   "europe-west1",
   "europe-west2",
@@ -16,7 +18,9 @@ valid_gcp_regions <- c(
   "europe-west4",
   "europe-west6",
   "northamerica-northeast1",
+  "northamerica-northeast2",
   "southamerica-east1",
+  "southamerica-west1",
   "us-central1",
   "us-east1",
   "us-east4",
@@ -28,31 +32,32 @@ valid_gcp_regions <- c(
 
 #' Deploy a Shiny app to Polished Hosting
 #'
-#' @param app_name You Shiny app's name.
+#' @param app_name Your Shiny app's name.
 #' @param app_dir The path to the directory containing your Shiny app.
-#' @param api_key Your polished.tech API key.  Defaults to \code{getOption("polished")$api_key}.
-#' @param api_url The Polished API url.  Defaults to "https://host-api.polished.tech".  You should
-#' not change from the default unless you are testing a development version of the API.
-#' @param launch_browser Whether or not to open your default browser to your newly deployed app
-#' after it is successfully deployed.  \code{TRUE} by default.
-#' @param region the region to deploy the app to on Google Cloud Platform.  See
-#' \url{https://cloud.google.com/compute/docs/regions-zones} for all available regions
-#' on Google Cloud Platform.  Currently on "us-east1" is supported, but soon, all regions
-#' will be supported.
-#' @param ram_gb the amount of memory to allocate to your Shiny app server. Valid values are
-#' 2, 4, or 8.
-#' @param r_ver Character string of R version.  If kept as \code{NULL}, the default, then
+#' @param api_key Your `polished` API key. Defaults to \code{Sys.getenv("POLISHED_API_KEY")} if set.
+#' @param launch_browser Boolean (default: \code{TRUE}) - Whether or not to open
+#' your newly deployed app in your default web browser after successful deployment.
+#' @param region the region to deploy the app to on Google Cloud Platform. See
+#' \url{https://cloud.google.com/run/docs/locations} for all available regions
+#' on Google Cloud Platform. Currently, database connections are only supported for
+#' `us-east1`. See \url{https://polished.tech/docs/06-database-connections} for details.
+#' @param ram_gb the amount of memory (in `GiB`) to allocate to your Shiny app's server.
+#' Valid values are `2`, `4`, or `8`.
+#' @param r_ver Character string of desired `R` version.  If kept as \code{NULL} (the default),
 #' \code{deploy_app()} will detect the R version you are currently running.  The R version must be a version
-#' supported by an r-ver Docker image.  You can see all the r-ver Docker image versions
+#' supported by an `r-ver` Docker image.  You can see all the `r-ver` Docker image versions
 #' of R here \url{https://github.com/rocker-org/rocker-versioned2/tree/master/dockerfiles} and here
-#' \code{https://github.com/rocker-org/rocker-versioned/tree/master/r-ver}.
-#' @param tlmgr a character vector of TeX Live packages to install.  This is only used if your Shiny
-#' app generates pdf documents.  Defaults to \code{character(0)} for no TeX Live installation.  Set to
-#' \code{TRUE} for a minimal TeX Live installation, and pass a character vector of your TeX Live package
-#' dependencies to have all your TeX Live packages installed at build time.
+#' \url{https://github.com/rocker-org/rocker-versioned/tree/master/r-ver}.
+#' @param tlmgr a character vector of `TeX Live` packages to install.  This is only used if your Shiny
+#' app generates `PDF` documents.  Defaults to \code{character(0)} for no `TeX Live` installation. Provide a
+#' character vector of your TeX Live package dependencies to have all your TeX Live packages installed at build time.
+#' @param golem_package_name if your Shiny app was created as a package with the
+#' `golem` package, provide the name of the Shiny app package as a character string.
+#' Defaults to \code{NULL}.  Keep as \code{NULL} for non `golem` Shiny apps.
+#' @param cache Boolean (default: \code{TRUE}) - whether or not to cache the Docker image.
 #'
 #' @importFrom utils browseURL
-#' @importFrom httr POST authenticate config status_code content upload_file
+#' @importFrom httr POST authenticate handle_reset status_code content upload_file
 #' @importFrom jsonlite fromJSON
 #'
 #' @export
@@ -71,13 +76,14 @@ valid_gcp_regions <- c(
 deploy_app <- function(
   app_name,
   app_dir = ".",
-  api_key = getOption("polished")$api_key,
-  api_url = "https://host-api.polished.tech",
+  api_key = get_api_key(),
   launch_browser = TRUE,
   region = "us-east1",
   ram_gb = 2,
   r_ver = NULL,
-  tlmgr = character(0)
+  tlmgr = character(0),
+  golem_package_name = NULL,
+  cache = TRUE
 ) {
 
   if (identical(Sys.getenv("SHINY_HOSTING"), "polished")) {
@@ -98,13 +104,21 @@ deploy_app <- function(
 
   # check that app_dir contains either an "app.R" file or a "ui.R" and a "server.R" file
   file_names <- tolower(list.files(path = app_dir))
-  if (!("app.r" %in% file_names || ("ui.r" %in% file_names && "server.r" %in% file_names))) {
+  if (!("app.r" %in% file_names || ("ui.r" %in% file_names && "server.r" %in% file_names)) && is.null(golem_package_name)) {
     stop('"app_dir" must contain a file named "app.R" or files named "ui.R" and "server.R"', call. = FALSE)
+  } else if (!is.null(golem_package_name) && !is.character(golem_package_name)) {
+    stop('"golem_package_name" must be a character string')
+  }
+
+  if (!is.logical(cache)) {
+    stop("`cache` must be logical", call. = FALSE)
   }
 
   if (is.null(r_ver)) {
     r_ver <- paste0(R.Version()$major, ".", R.Version()$minor)
   }
+
+
 
   cat("Creating app bundle...")
   app_zip_path <- bundle_app(
@@ -113,14 +127,18 @@ deploy_app <- function(
   cat(" Done\n")
 
   cat("Deploying App.  Hang tight.  This may take a while...\n")
-  cat("Your Shiny app will open in your default web browser once deployment is complete.\n")
+  if (isTRUE(launch_browser)) {
+    cat("Your Shiny app will open in your default web browser once deployment is complete.\n")
+  }
   cat("Deployment status can be found at https://dashboard.polished.tech")
   zip_to_send <- httr::upload_file(
     path = app_zip_path,
     type = "application/x-gzip"
   )
 
-  url_ <- paste0(api_url, "/deploy-app")
+
+
+  url_ <- paste0(.polished$host_api_url, "/hosted-apps")
   # reset the handle.  This allows us to redeploy the app after a failed deploy.  Without
   # resetting the handle, the request sometimes does not go through.  It just sits there
   # doing nothing...
@@ -140,7 +158,9 @@ deploy_app <- function(
       region = region,
       ram_gb = ram_gb,
       r_ver = r_ver,
-      tlmgr = paste(tlmgr, collapse = ",")
+      tlmgr = paste(tlmgr, collapse = ","),
+      golem_package_name = golem_package_name,
+      cache = cache
     ),
     encode = "multipart",
     http_version = 0,
@@ -148,24 +168,20 @@ deploy_app <- function(
     timeout = 1800
   )
 
-  res_content <- jsonlite::fromJSON(
-    httr::content(res, "text", encoding = "UTF-8")
-  )
 
-  hold_status <- httr::status_code(res)
+  out <- polished_api_res(res)
+
+  hold_status <- httr::status_code(out$response)
   if (identical(hold_status, 200L)) {
     cat(" Done\n")
 
     if (isTRUE(launch_browser)) {
       # launch user's browser with newly deployed Shiny app
-      utils::browseURL(res_content$url)
+      utils::browseURL(out$content$url)
     }
   }
 
-  list(
-    status = hold_status,
-    content = res_content
-  )
+  out
 }
 
 
@@ -193,7 +209,7 @@ deploy_app <- function(
 #' }
 #'
 #'
-bundle_app <- function (
+bundle_app <- function(
   app_dir = "."
 ) {
 
@@ -310,6 +326,6 @@ dir_copy <- function(from, to, overwrite = TRUE, all.files = TRUE,
     unlink(to, recursive = TRUE)
     stop("Could not copy all files from directory '", from, "' to directory '", to, "'.")
   }
-  setNames(res, files.relative)
+  stats::setNames(res, files.relative)
 
 }

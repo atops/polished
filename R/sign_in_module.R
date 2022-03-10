@@ -6,6 +6,9 @@
 #' @param register_link The text that will be displayed in the link to go to the
 #' user registration page.  The default is \code{"First time user? Register here!"}.
 #' Set to \code{NULL} if you don't want to use the registration page.
+#' @param password_reset_link The text that will be displayed in the link to go to the
+#' receive an email to reset your password.  The default is \code{"Forgot your password?"}.
+#' Set to \code{NULL} if you don't want to use the registration page.
 #'
 #' @importFrom shiny textInput actionButton NS actionLink
 #' @importFrom htmltools tagList tags div h1 br hr
@@ -22,7 +25,7 @@ sign_in_module_ui <- function(
 ) {
   ns <- shiny::NS(id)
 
-  providers <- .global_sessions$sign_in_providers
+  providers <- .polished$sign_in_providers
 
   continue_sign_in <- div(
     id = ns("continue_sign_in"),
@@ -118,6 +121,12 @@ sign_in_module_ui <- function(
     )
   )
 
+  if (is.null(password_reset_link)) {
+    pass_link_ui <- NULL
+  } else {
+    pass_link_ui <- send_password_reset_email_module_ui(ns("reset_password"), password_reset_link)
+  }
+
   email_ui <- tags$div(
     id = ns("email_ui"),
     tags$div(
@@ -133,7 +142,7 @@ sign_in_module_ui <- function(
     ),
     tags$div(
       id = ns("sign_in_panel_bottom"),
-      if (isTRUE(.global_sessions$is_invite_required)) {
+      if (isTRUE(.polished$is_invite_required)) {
         tagList(continue_sign_in, shinyjs::hidden(sign_in_password_ui))
       } else {
         sign_in_password_ui
@@ -152,7 +161,7 @@ sign_in_module_ui <- function(
           )
         },
         br(),
-        send_password_reset_email_module_ui(ns("reset_password"))
+        pass_link_ui
       )
     ),
 
@@ -174,7 +183,7 @@ sign_in_module_ui <- function(
 
     shinyjs::hidden(div(
       id = ns("register_panel_bottom"),
-      if (isTRUE(.global_sessions$is_invite_required)) {
+      if (isTRUE(.polished$is_invite_required)) {
         tagList(continue_registration, shinyjs::hidden(register_passwords))
       } else {
         register_passwords
@@ -240,11 +249,19 @@ sign_in_module_ui <- function(
 #' @importFrom shinyWidgets sendSweetAlert
 #' @importFrom shinyFeedback showToast hideFeedback showFeedbackDanger resetLoadingButton
 #' @importFrom digest digest
-#' @importFrom httr POST authenticate
 #'
 #' @export
 #'
 sign_in_module <- function(input, output, session) {
+
+  callModule(
+    sign_in_module_ns,
+    "sign_in"
+  )
+
+}
+
+sign_in_module_ns <- function(input, output, session) {
   ns <- session$ns
 
   # Email Sign-In validation
@@ -309,9 +326,15 @@ sign_in_module <- function(input, output, session) {
     invite <- NULL
     tryCatch({
 
-      invite <- .global_sessions$get_invite_by_email(email)
+      invite_res <- get_app_users(
+        app_uid = .polished$app_uid,
+        email = email
+      )
 
-      if (is.null(invite)) {
+      invite <- invite_res$content
+
+
+      if (!identical(nrow(invite), 1L)) {
 
         shinyWidgets::sendSweetAlert(
           session,
@@ -412,7 +435,12 @@ sign_in_module <- function(input, output, session) {
 
     invite <- NULL
     tryCatch({
-      invite <- .global_sessions$get_invite_by_email(email)
+      invite_res <- get_app_users(
+        app_uid = .polished$app_uid,
+        email = email
+      )
+
+      invite <- invite_res$content
 
       if (is.null(invite)) {
 
@@ -457,8 +485,8 @@ sign_in_module <- function(input, output, session) {
     hold_password <- input$register_js$password
     cookie <- input$register_js$cookie
 
-
-    if (!is_valid_email(hold_email)) {
+    is_email <- is.null(input$check_jwt$jwt)
+    if (isTRUE(is_email) && !is_valid_email(hold_email)) {
 
       shinyFeedback::showFeedbackDanger(
         "register_email",
@@ -473,7 +501,7 @@ sign_in_module <- function(input, output, session) {
 
 
     tryCatch({
-      .global_sessions$register_email(
+      register_email(
         hold_email,
         hold_password,
         hashed_cookie
@@ -498,7 +526,8 @@ sign_in_module <- function(input, output, session) {
   check_jwt_email_valid <- reactive({
     req(input$check_jwt)
 
-    if (!is_valid_email(isolate({input$sign_in_email}))) {
+    is_email <- is.null(input$check_jwt$jwt)
+    if (isTRUE(is_email) && !is_valid_email(isolate({input$sign_in_email}))) {
 
       shinyFeedback::showFeedbackDanger(
         "sign_in_email",

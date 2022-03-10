@@ -11,8 +11,8 @@
 #'   validating that each detection is indeed a valid `CRAN` or public `GitHub` package
 #'   and can be installed.
 #'
-#' @param app_dir path to a directory containing R scripts or RMarkdown files. Defaults to current working directory if left blank.
-#' @param verbose logical - defaults to TRUE. Will provide feedback to detected or invalid R packages.
+#' @param app_dir path to a directory containing R scripts or R Markdown files. Defaults to current working directory if left blank.
+#' @param verbose boolean (default: \code{TRUE}) - Provide feedback about detected invalid R packages.
 #'
 #' @return a list of package dependencies
 #'
@@ -21,12 +21,11 @@
 #' @seealso [automagic::parse_packages()]
 #'
 #' @examples
-#' library(polished)
-#' dir <- system.file("examples", "polished_example_01", package = "polished")
-#' pkg_deps <- polished:::get_package_deps(dir)
+#' #library(polished)
+#' #dir <- system.file("examples", "polished_example_01", package = "polished")
+#' #pkg_deps <- polished:::get_package_deps(dir)
 #'
 #' @importFrom automagic get_package_details
-#' @importFrom cli cli_alert_warning cli_alert_danger cat_bullet
 #' @importFrom dplyr %>%
 #' @importFrom purrr safely map_depth pluck compact map
 get_package_deps <- function(
@@ -44,8 +43,8 @@ get_package_deps <- function(
 
   # return if no detections
   if (length(init_pkg_names) == 0) {
-    cli::cli_alert_warning("warning: no packages found in specified directory")
-    return(invisible(NULL))
+    warning("no packages found in specified directory", call. = FALSE)
+    invisible(NULL)
   }
 
 
@@ -69,7 +68,8 @@ get_package_deps <- function(
   hold <- hold[!(names(hold) %in% errors)]
 
   if (length(errors) > 0 && verbose) {
-    cli::cli_alert_danger("Silently removing detected invalid packages: {errors}")
+    removed_packages <- paste(errors, collapse = ", ")
+    warning(paste0("Silently removing detected invalid packages: ", removed_packages), call. = FALSE)
   }
 
   purrr::map_depth(hold, 1, purrr::pluck, "result") %>%

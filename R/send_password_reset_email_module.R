@@ -1,19 +1,21 @@
 #' the UI for a Shiny module to send a password reset email
 #'
 #' @param id the Shiny module \code{id}
+#' @param link_text text to use for the password reset link.
 #'
-#' @importFrom shiny actionLink
+#' @importFrom htmltools tagList
+#' @importFrom shiny actionLink NS
 #' @importFrom shinyFeedback useShinyFeedback
 #'
 #' @export
-send_password_reset_email_module_ui <- function(id) {
-  ns <- NS(id)
+send_password_reset_email_module_ui <- function(id, link_text = "Forgot your password?") {
+  ns <- shiny::NS(id)
 
   tagList(
     shinyFeedback::useShinyFeedback(feedback = FALSE),
     shiny::actionLink(
       inputId = ns("reset_password"),
-      "Forgot your password?"
+      link_text
     )
   )
 }
@@ -30,7 +32,7 @@ send_password_reset_email_module_ui <- function(id) {
 #' reset email to.
 #'
 #' @importFrom shiny observeEvent
-#' @importFrom httr POST authenticate status_code
+#' @importFrom httr POST authenticate content status_code
 #' @importFrom jsonlite fromJSON
 #' @importFrom shinyFeedback showToast
 #'
@@ -44,18 +46,17 @@ send_password_reset_email_module <- function(input, output, session, email) {
 
     tryCatch({
       res <- httr::POST(
-        url = paste0(getOption("polished")$api_url, "/send-password-reset-email"),
+        url = paste0(.polished$api_url, "/send-password-reset-email"),
         httr::authenticate(
-          user = getOption("polished")$api_key,
+          user = get_api_key(),
           password = ""
         ),
         body = list(
           email = hold_email,
-          app_uid = getOption("polished")$app_uid,
-          is_invite_required = .global_sessions$is_invite_required
+          app_uid = .polished$app_uid,
+          is_invite_required = .polished$is_invite_required
         ),
-        encode = "json",
-        config = list(http_version = 0)
+        encode = "json"
       )
 
       res_content <- jsonlite::fromJSON(
@@ -63,7 +64,7 @@ send_password_reset_email_module <- function(input, output, session, email) {
       )
 
       if (!identical(httr::status_code(res), 200L)) {
-        stop(res_content$message)
+        stop(res_content$error)
       }
 
       shinyFeedback::showToast(
